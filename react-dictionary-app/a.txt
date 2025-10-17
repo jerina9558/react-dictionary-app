@@ -1,0 +1,422 @@
+# React Dictionary App — Full Source, Dockerfile, and AWS EC2 Deployment Steps
+
+This textdoc contains the **complete source code** for a small React Dictionary App (search a word, show definitions), a Docker multi-stage Dockerfile (build with Node, serve with nginx), .dockerignore, and step-by-step instructions to:
+
+- push the project to **GitHub**,
+- build and run the Docker image on **Docker Desktop**, and
+- create/configure an **AWS EC2** server to host the Dockerized app (clone from GitHub or pull from Docker Hub).
+
+> **Important:** open this document in the canvas panel to view and copy the full files. Do **not** paste the code elsewhere without reading the README instructions below.
+
+---
+
+## Project structure
+
+```
+react-dictionary-app/
+├── README.md
+├── package.json
+├── .gitignore
+├── Dockerfile
+├── .dockerignore
+├── nginx.conf
+├── src/
+│   ├── index.js
+│   ├── App.js
+│   ├── components/Search.js
+│   └── index.css
+└── public/
+    └── index.html
+```
+
+---
+
+## Key idea
+
+User enters a word in a search box; the app calls the free Dictionary API `https://api.dictionaryapi.dev/api/v2/entries/en/<word>` and displays returned meanings, examples, and part of speech. Error states are handled (not found, network error). The app is small and production-ready (build served by nginx).
+
+---
+
+## Files (full contents)
+
+### package.json
+
+```json
+{
+  "name": "react-dictionary-app",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "start": "react-scripts start",
+    "build": "react-scripts build",
+    "test": "react-scripts test --env=jsdom",
+    "eject": "react-scripts eject"
+  },
+  "dependencies": {
+    "react": "18.2.0",
+    "react-dom": "18.2.0",
+    "react-scripts": "5.0.1"
+  }
+}
+```
+
+---
+
+### public/index.html
+
+```html
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>React Dictionary App</title>
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>
+```
+
+---
+
+### src/index.js
+
+```javascript
+import React from 'react';
+import { createRoot } from 'react-dom/client';
+import App from './App';
+import './index.css';
+
+const container = document.getElementById('root');
+const root = createRoot(container);
+root.render(<App />);
+```
+
+---
+
+### src/App.js
+
+```javascript
+import React from 'react';
+import Search from './components/Search';
+
+export default function App() {
+  return (
+    <div className="app">
+      <header className="header">
+        <h1>React Dictionary</h1>
+        <p>Search a word to see definitions (powered by dictionaryapi.dev)</p>
+      </header>
+
+      <main className="main">
+        <Search />
+      </main>
+
+      <footer className="footer">Made with ❤️</footer>
+    </div>
+  );
+}
+```
+
+---
+
+### src/components/Search.js
+
+```javascript
+import React, { useState } from 'react';
+
+export default function Search() {
+  const [query, setQuery] = useState('');
+  const [result, setResult] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  async function handleSearch(e) {
+    e.preventDefault();
+    const word = query.trim();
+    if (!word) return;
+
+    setLoading(true);
+    setError(null);
+    setResult(null);
+
+    try {
+      const res = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word)}`);
+      if (!res.ok) {
+        if (res.status === 404) throw new Error('Word not found');
+        throw new Error('Network response was not ok');
+      }
+      const data = await res.json();
+      setResult(data);
+    } catch (err) {
+      setError(err.message || 'Something went wrong');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="search-card">
+      <form onSubmit={handleSearch} className="search-form">
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Enter a word (e.g. example)"
+          aria-label="Search word"
+        />
+        <button type="submit">Search</button>
+      </form>
+
+      <section className="status">
+        {loading && <p>Loading...</p>}
+        {error && <p className="error">{error}</p>}
+      </section>
+
+      {result && (
+        <section className="results">
+          {result.map((entry, idx) => (
+            <article key={idx} className="entry">
+              <h2>{entry.word} <small>{entry.phonetic}</small></h2>
+
+              {entry.meanings.map((meaning, mIdx) => (
+                <div key={mIdx} className="meaning">
+                  <h3>{meaning.partOfSpeech}</h3>
+                  <ol>
+                    {meaning.definitions.map((d, dIdx) => (
+                      <li key={dIdx}>
+                        <p>{d.definition}</p>
+                        {d.example && <blockquote>"{d.example}"</blockquote>}
+                      </li>
+                    ))}
+                  </ol>
+                </div>
+              ))}
+            </article>
+          ))}
+        </section>
+      )}
+    </div>
+  );
+}
+```
+
+---
+
+### src/index.css
+
+```css
+:root { --bg: #0f172a; --card:#0b1220; --muted:#94a3b8; --accent:#60a5fa }
+*{box-sizing:border-box}
+body{font-family:Inter,system-ui,Segoe UI,Roboto,"Helvetica Neue",Arial;margin:0;background:linear-gradient(180deg,#071028 0%, #041124 100%);color:#e6eef8;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
+.app{width:100%;max-width:900px}
+.header{text-align:center;margin-bottom:18px}
+.header h1{margin:0;font-size:2rem}
+.search-card{background:rgba(255,255,255,0.03);padding:18px;border-radius:12px;box-shadow:0 6px 20px rgba(2,6,23,0.6)}
+.search-form{display:flex;gap:8px;margin-bottom:12px}
+.search-form input{flex:1;padding:10px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:transparent;color:inherit}
+.search-form button{padding:10px 14px;border-radius:8px;border:none;background:var(--accent);color:#012;cursor:pointer}
+.results .entry{padding:12px 0;border-top:1px dashed rgba(255,255,255,0.04)}
+.meaning h3{margin:6px 0}
+.error{color:#ff9b9b}
+.footer{text-align:center;margin-top:14px;opacity:0.75}
+```
+
+---
+
+### .dockerignore
+
+```
+node_modules
+build
+.dockerignore
+.git
+.gitignore
+.env
+```
+
+---
+
+### nginx.conf
+
+```nginx
+server {
+  listen       80;
+  server_name  _;
+
+  root /usr/share/nginx/html;
+  index index.html;
+
+  location / {
+    try_files $uri /index.html;
+  }
+
+  # optional: increase buffer sizes if large responses from API pass-through
+  location /api/ {
+    proxy_pass http://127.0.0.1; # unused by default
+  }
+}
+```
+
+---
+
+### Dockerfile (multi-stage)
+
+```dockerfile
+# build stage
+FROM node:18-alpine AS build
+WORKDIR /app
+COPY package.json package-lock.json* ./
+RUN npm ci --silent || npm install --silent
+COPY public ./public
+COPY src ./src
+RUN npm run build
+
+# production stage
+FROM nginx:stable-alpine
+COPY --from=build /app/build /usr/share/nginx/html
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+EXPOSE 80
+CMD ["nginx", "-g", "daemon off;"]
+```
+
+> Note: If you used `npm install` (no package-lock) adjust commands accordingly. The provided Dockerfile covers both cases.
+
+---
+
+## README — Quick usage (summary)
+
+1. Initialize locally and push to GitHub
+
+```bash
+git init
+git add .
+git commit -m "React Dictionary App"
+# create a repo on GitHub (e.g. react-dictionary-app) then
+git remote add origin git@github.com:<YOUR_USER>/react-dictionary-app.git
+git branch -M main
+git push -u origin main
+```
+
+2. Build & run on Docker Desktop (locally)
+
+```bash
+# build image
+docker build -t yourdockerhubuser/react-dictionary:latest .
+# run (exposes container 80 -> local 3000 for convenience)
+docker run -d --name react-dict -p 3000:80 yourdockerhubuser/react-dictionary:latest
+# then open http://localhost:3000
+```
+
+3. OPTIONAL: publish image to Docker Hub
+
+```bash
+docker login
+docker tag yourdockerhubuser/react-dictionary:latest yourdockerhubuser/react-dictionary:latest
+docker push yourdockerhubuser/react-dictionary:latest
+```
+
+4. Deploy on AWS EC2 (two options)
+
+**Option A — Pull & run Docker image on EC2 (recommended)**
+
+- Launch an EC2 instance (Ubuntu 22.04 LTS or Amazon Linux 2) with a security group allowing ports: 22 (SSH), 80 (HTTP).
+- SSH to instance:
+  ```bash
+  ssh -i /path/mykey.pem ubuntu@<EC2_PUBLIC_IP>
+  ```
+- Install Docker (Ubuntu example):
+  ```bash
+  sudo apt update
+  sudo apt install -y docker.io git
+  sudo systemctl enable --now docker
+  sudo usermod -aG docker $USER
+  # either log out/in or run 'newgrp docker' for group to apply
+  ```
+- Pull image from Docker Hub and run:
+  ```bash
+  docker pull yourdockerhubuser/react-dictionary:latest
+  docker run -d --restart unless-stopped -p 80:80 --name react-dict yourdockerhubuser/react-dictionary:latest
+  ```
+- Visit `http://<EC2_PUBLIC_IP>` in browser.
+
+**Option B — Build on EC2 from GitHub**
+
+- Ensure Git & Docker are installed (see commands above).
+- Clone your repo:
+  ```bash
+  git clone https://github.com/<YOUR_USER>/react-dictionary-app.git
+  cd react-dictionary-app
+  docker build -t react-dictionary:latest .
+  docker run -d --restart unless-stopped -p 80:80 --name react-dict react-dictionary:latest
+  ```
+
+**Make the container restart on reboot** (systemd approach is optional):
+
+```bash
+# container already run with --restart unless-stopped; that's usually enough.
+# if preferred, create a simple systemd unit that ensures docker run is present — or use docker compose.
+```
+
+---
+
+## Notes & suggestions
+
+- The app uses the public Dictionary API `https://api.dictionaryapi.dev/`. For heavy/production usage, consider caching responses or adding a small backend to avoid CORS or rate-limiting issues.
+- For CI/CD, use GitHub Actions to build and push images to Docker Hub or ECR, then deploy to EC2 automatically.
+- If you prefer AWS ECS or AWS App Runner, those simplify running Docker containers and auto-scaling.
+
+---
+
+## Troubleshooting tips
+
+- If you see a blank page after deployment, check `docker logs <container>` and `docker ps -a`.
+- On EC2 ensure Security Group inbound rules include `HTTP (80)` from 0.0.0.0/0 (or restrict to your IPs).
+- If API fetch fails due to CORS, the public dictionary API supports direct browser calls; otherwise route via a small proxy service.
+
+---
+
+If you want, I can also:
+- generate a `docker-compose.yml` for local development that includes live-reloading,
+- add a tiny Express proxy backend (optional) to avoid any CORS & caching needs,
+- create GitHub Actions workflow to build and push Docker image on every push.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
