@@ -386,12 +386,19 @@ If you want, I can also:
 
 
 
+cd C:\Users\Asus\Desktop\react-dictionary-app
+git remote remove origin
+git remote add origin https://github.com/jerina9558/react-dictionary-app.git
 
 
 
 
 
 
+git branch -M main
+git add .
+git commit -m "Initial commit"
+git push -u origin main
 
 
 
